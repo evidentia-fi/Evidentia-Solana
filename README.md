@@ -1,128 +1,110 @@
-# Evidentia Solana Program
-
-This repository contains the Evidentia program, a decentralized application built for the Solana blockchain. Written in Rust using the [Anchor framework](https://www.anchor-lang.com/), the program leverages Solana’s high throughput, low transaction fees, and parallel execution capabilities to deliver a scalable and efficient platform.
+# Evidentia Bond-Backed Stablecoin Platform (Solana)
 
 ## Overview
+Evidentia is a decentralized finance (DeFi) platform on Solana that enables users to tokenize bonds, use them as collateral to borrow stablecoins, and earn yield by staking stablecoins. This implementation adapts the EVM-based Evidentia protocol to Solana’s high-performance blockchain, leveraging Solana Program Library (SPL) tokens and the Anchor framework for robust smart contract development.
 
-The Evidentia program enables users to manage data records, permissions, or tokenized operations, such as storing verified data, controlling access, or transferring tokens. Solana’s stateless program model stores data in separate accounts, and the Sealevel runtime processes transactions in parallel for optimal performance. The program uses the Anchor framework for streamlined development, program-derived addresses (PDAs) for state management, and optionally integrates with Solana’s SPL Token program for token functionality.
+## Core Workflow
+1. **Tokenize Bonds**: Bonds are represented as semi-fungible SPL tokens via the BondNFT program, embedding metadata (value, coupon rate, timestamps, ISIN).
+2. **Stake Bonds as Collateral**: Users deposit BondNFTs into the NFTStakingAndBorrowing program.
+3. **Borrow Stablecoins**: Users borrow StableBondCoins (SBC), a fungible SPL token, against staked BondNFTs. Loans accrue interest over time.
+4. **Earn Yield via Staking**: SBC holders stake tokens in the StableCoinsStaking program to earn rewards from interest revenue.
+
+## Key Features
+- **Tokenized Bonds (SPL Token)**: The BondNFT program manages semi-fungible tokens with metadata, analogous to ERC-1155.
+- **Collateralized Debt Position (CDP)**: The NFTStakingAndBorrowing program enables borrowing SBC against BondNFT collateral.
+- **Native Stablecoin (SPL Token)**: StableBondCoins (SBC) is a mintable/burnable token used for borrowing and staking.
+- **NFT Staking & Borrowing**: Users lock BondNFTs to borrow SBC, subject to collateralization ratios and interest rates.
+- **Stablecoin Staking & Yield**: The StableCoinsStaking program allows SBC staking for yield generation.
+- **Interest Accrual & Reward Distribution**: Manages loan interest and distributes rewards to stakers.
+- **Modular Architecture**: Separate programs for BondNFT, StableBondCoins, NFTStakingAndBorrowing, and StableCoinsStaking.
+- **Access Control & Security**: Employs Program Derived Address (PDA)-based ownership, signer checks, and reentrancy protections.
 
 ## Architecture
+### Design Considerations
+- **Solana's Account Model**: Programs are stateless; data is stored in accounts owned by programs.
+- **SPL Tokens**: Used for BondNFT (semi-fungible) and StableBondCoins (fungible).
+- **Upgradeability**: Supports program upgrades via `bpf_loader_upgradeable`.
+- **Security**: PDA ownership, signer checks, and state-based reentrancy protection.
+- **Development**: Built with Rust and Anchor for simplified serialization and security.
 
-The Evidentia program is designed within Solana’s account-based, stateless program model. Below is the architecture, detailing the program’s components, account structures, and data flow.
+### Core Programs
 
-### Key Components
+#### BondNFT Program
+- **Purpose**: Manages tokenized bonds as semi-fungible SPL tokens.
+- **Key Accounts**:
+  - `BondMetadataAccount`: Stores bond metadata (value, coupon rate, timestamps, ISIN).
+  - `MintAccount`: SPL token mint for each bond ID.
+  - `UserTokenAccount`: Tracks user bond token balances.
+- **Instructions**:
+  - `mint(to: Pubkey, id: u64, amount: u64, metadata: BondMetadata)`: Mints bond tokens (admin-only).
+  - `burn(id: u64, amount: u64)`: Burns bond tokens.
+  - `set_metadata(id: u64, metadata: BondMetadata)`: Updates bond metadata (admin-only).
+  - `get_metadata(id: u64)`: Retrieves bond metadata.
+  - `transfer(from: Pubkey, to: Pubkey, id: u64, amount: u64)`: Transfers bond tokens.
+- **Test Version (BondNFTV2)**: Includes `initialize_v2` and `new_feature` for upgrade testing.
 
-1. **Program**:
-   - A single Solana program, written in Rust with Anchor, handles core logic, including:
-     - Initializing accounts for configuration or data storage.
-     - Updating records (e.g., storing or modifying data).
-     - Managing user permissions (e.g., granting access).
-     - Token operations (if applicable, using the SPL Token program).
-   - **Program ID**: A unique public key identifying the program on the Solana blockchain.
-   - **Anchor Framework**: Provides declarative macros to simplify serialization, account validation, and instruction handling.
+#### StableBondCoins Program
+- **Purpose**: Manages StableBondCoins (SBC) as a fungible SPL token.
+- **Key Accounts**:
+  - `MintAccount`: SPL token mint for SBC.
+  - `AuthorityAccount`: PDA controlling minting/burning.
+  - `UserTokenAccount`: Tracks user SBC balances.
+- **Instructions**:
+  - `mint(to: Pubkey, amount: u64)`: Mints SBC (minter authority only).
+  - `burn(from: Pubkey, amount: u64)`: Burns SBC.
+  - `transfer(to: Pubkey, amount: u64)`: Transfers SBC.
+  - `approve(spender: Pubkey, amount: u64)`: Sets delegate for SPL token approvals.
+- **Test Version (StableBondCoinsV2)**: Includes `initialize_v2` and `new_feature` for upgrade testing.
 
-2. **Accounts**:
-   - **Program-Derived Addresses (PDAs)**:
-     - **Config Account**: Stores global settings, such as the admin public key or system parameters.
-     - **Record Account**: Holds individual data records, including content, owner, or metadata.
-     - **User Account**: Tracks user-specific data, such as permissions or token balances.
-   - **Executable Account**: The program itself, containing compiled Berkeley Packet Filter (BPF) bytecode.
-   - **Token Accounts**: Managed by the SPL Token program for token-related operations (if applicable).
+#### NFTStakingAndBorrowing Program
+- **Purpose**: Handles staking of BondNFTs and borrowing SBC.
+- **Key Accounts**:
+  - `UserStakeAccount`: PDA storing staked BondNFTs (bond ID, amount).
+  - `LoanAccount`: PDA tracking loans (borrowed amount, interest, timestamp).
+  - `RewardPoolAccount`: Stores accumulated interest for rewards.
+- **Instructions**:
+  - `stake_nft(nft_mint: Pubkey, token_id: u64, amount: u64)`: Stakes BondNFTs.
+  - `unstake_nft(nft_mint: Pubkey, token_id: u64, amount: u64)`: Unstakes BondNFTs.
+  - `borrow(amount: u64)`: Borrows SBC against collateral.
+  - `repay(amount: u64)`: Repays loan with interest.
+  - `claim_rewards()`: Claims interest-based rewards.
+- **Test Version (NFTStakingAndBorrowingV2)**: Includes `initialize_v2` and `new_feature` for upgrade testing.
 
-3. **Instructions**:
-   - Instructions serve as entry points to the program, defining its functionality:
-     - `initialize`: Creates PDAs and sets initial state (e.g., admin settings).
-     - `update_record`: Modifies data in a record account, with authorization checks.
-     - `grant_access`: Updates user permissions, restricted to admins.
-     - `transfer_token`: Facilitates token transfers (if applicable).
-   - Each instruction specifies accounts to read or write, enabling parallel execution via Solana’s Sealevel runtime.
+#### StableCoinsStaking Program
+- **Purpose**: Enables SBC staking for yield generation.
+- **Key Accounts**:
+  - `StakeAccount`: PDA storing user’s staked SBC and reward data.
+  - `RewardPoolAccount`: Tracks rewards for distribution.
+- **Instructions**:
+  - `stake(amount: u64)`: Stakes SBC.
+  - `withdraw(amount: u64)`: Withdraws staked SBC.
+  - `claim_rewards()`: Claims accrued rewards.
+  - `earned(staker: Pubkey)`: Calculates unclaimed rewards.
+- **Test Version (StableCoinsStakingV2)**: Includes `initialize_v2` and `new_feature` for upgrade testing.
 
-4. **Client Interaction**:
-   - Clients (e.g., web apps or scripts) interact with the program using Solana’s JSON RPC API or libraries like `@solana/web3.js`.
-   - Transactions include:
-     - Instruction data (e.g., function name and parameters).
-     - A list of accounts to access.
-     - Signatures from relevant keypairs (e.g., user or admin).
-
-5. **Parallel Execution**:
-   - Solana’s Sealevel runtime processes transactions concurrently when they access non-overlapping accounts. The program declares account access (read/write) in each instruction, allowing the runtime to optimize transaction scheduling.
-   - Example: Two `update_record` instructions targeting different PDAs can execute simultaneously.
-
-### Data Flow
-
-1. **Initialization**:
-   - A client calls `initialize` to create PDAs for configuration and data storage, setting initial state (e.g., admin public key).
-2. **Data Operations**:
-   - Users call `update_record` to store or update data in a PDA, with the program enforcing permission checks.
-3. **Permission Management**:
-   - Admins call `grant_access` to modify user permissions in a PDA.
-4. **Token Operations** (if applicable):
-   - Users call `transfer_token` to manage token transfers via SPL Token accounts.
-
-### Security Considerations
-
-- **Account Ownership**: PDAs are owned by the program, ensuring only the program can modify their data.
-- **Signature Verification**: Instructions validate signers (e.g., user or admin keypairs) to enforce access control.
-- **Rent Exemption**: Accounts maintain a minimum balance of lamports to remain active on the blockchain.
-- **Anchor Constraints**: Use `@account` and `@constraint` macros to enforce validation, such as correct PDA derivation.
-
-### Example Program Structure
-
+### Data Structures
 ```rust
-use anchor_lang::prelude::*;
-
-declare_id!("EvidentiaProgramID...");
-
-#[program]
-mod evidentia {
-    use super::*;
-
-    pub fn initialize(ctx: Context<Initialize>, config_data: ConfigData) -> Result<()> {
-        let config = &mut ctx.accounts.config;
-        config.admin = *ctx.accounts.signer.key;
-        config.data = config_data;
-        Ok(())
-    }
-
-    pub fn update_record(ctx: Context<UpdateRecord>, record_id: u64, data: Vec<u8>) -> Result<()> {
-        let record = &mut ctx.accounts.record;
-        require!(record.owner == *ctx.accounts.signer.key, ErrorCode::Unauthorized);
-        record.data = data;
-        Ok(())
-    }
-}
-
-#[derive(Accounts)]
-pub struct Initialize<'info> {
-    #[account(init, payer = signer, space = 8 + Config::LEN)]
-    pub config: Account<'info, Config>,
-    #[account(mut)]
-    pub signer: Signer<'info>,
-    pub system_program: Program<'info, System>,
+#[account]
+pub struct BondMetadata {
+    pub value: u64,
+    pub coupon_value: u64,
+    pub issue_timestamp: i64,
+    pub expiration_timestamp: i64,
+    pub isin: String,
 }
 
 #[account]
-pub struct Config {
-    pub admin: Pubkey,
-    pub data: ConfigData,
-}
-
-#[derive(Accounts)]
-pub struct UpdateRecord<'info> {
-    #[account(mut, has_one = owner)]
-    pub record: Account<'info, Record>,
-    #[account(mut)]
-    pub signer: Signer<'info>,
+pub struct UserStake {
+    pub nft_mint: Pubkey,
+    pub token_id: u64,
+    pub amount: u64,
+    pub timestamp: i64,
 }
 
 #[account]
-pub struct Record {
-    pub owner: Pubkey,
-    pub data: Vec<u8>,
-}
-
-#[error_code]
-pub enum ErrorCode {
-    #[msg("Unauthorized access")]
-    Unauthorized,
+pub struct Loan {
+    pub borrower: Pubkey,
+    pub amount: u64,
+    pub interest_rate: u64,
+    pub start_timestamp: i64,
 }
