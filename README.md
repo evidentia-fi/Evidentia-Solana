@@ -1,78 +1,70 @@
 # Evidentia Solana Program
 
-This repository contains the Solana implementation of the Evidentia smart contracts, originally designed for the Ethereum Virtual Machine (EVM). The program is written in Rust using the [Anchor framework](https://www.anchor-lang.com/) and runs on the Solana blockchain, leveraging its high throughput, low fees, and parallel execution capabilities.
+This repository contains the Evidentia program, a decentralized application built for the Solana blockchain. Written in Rust using the [Anchor framework](https://www.anchor-lang.com/), the program leverages Solana’s high throughput, low transaction fees, and parallel execution capabilities to deliver a scalable and efficient platform.
 
 ## Overview
 
-Evidentia on Solana provides a decentralized platform for managing data records, user permissions, or tokenized operations (e.g., storing verified data, controlling access, or issuing tokens). Unlike EVM-based contracts, Solana programs are stateless, with data stored in separate accounts. This implementation uses the Anchor framework to simplify development, program-derived addresses (PDAs) for state management, and Solana’s Sealevel runtime for parallel transaction processing.
+The Evidentia program enables users to manage data records, permissions, or tokenized operations, such as storing verified data, controlling access, or transferring tokens. Solana’s stateless program model stores data in separate accounts, and the Sealevel runtime processes transactions in parallel for optimal performance. The program uses the Anchor framework for streamlined development, program-derived addresses (PDAs) for state management, and optionally integrates with Solana’s SPL Token program for token functionality.
 
 ## Architecture
 
-The Evidentia Solana program adapts the EVM-based smart contract logic to Solana’s stateless program model. Below is the architecture, highlighting key components, account structures, and differences from the EVM implementation.
+The Evidentia program is designed within Solana’s account-based, stateless program model. Below is the architecture, detailing the program’s components, account structures, and data flow.
 
 ### Key Components
 
-1. **Programs (Smart Contracts)**:
+1. **Program**:
    - A single Solana program, written in Rust with Anchor, handles core logic, including:
-     - Initializing data accounts (e.g., for records or configurations).
-     - Updating records (e.g., storing verified data).
-     - Managing permissions (e.g., granting user access).
-     - Token operations (if applicable, using Solana’s SPL Token program).
-   - **Program ID**: A unique public key identifies the program on Solana.
-   - **Anchor Framework**: Simplifies program development with declarative macros for serialization and account validation.
+     - Initializing accounts for configuration or data storage.
+     - Updating records (e.g., storing or modifying data).
+     - Managing user permissions (e.g., granting access).
+     - Token operations (if applicable, using the SPL Token program).
+   - **Program ID**: A unique public key identifying the program on the Solana blockchain.
+   - **Anchor Framework**: Provides declarative macros to simplify serialization, account validation, and instruction handling.
 
 2. **Accounts**:
    - **Program-Derived Addresses (PDAs)**:
-     - **Config Account**: Stores global settings (e.g., admin public key or system parameters).
-     - **Record Account**: Holds individual data records (e.g., content, owner, verification status).
-     - **User Account**: Tracks user-specific data (e.g., permissions or token balances).
-   - **Executable Account**: The program itself, containing compiled BPF bytecode.
+     - **Config Account**: Stores global settings, such as the admin public key or system parameters.
+     - **Record Account**: Holds individual data records, including content, owner, or metadata.
+     - **User Account**: Tracks user-specific data, such as permissions or token balances.
+   - **Executable Account**: The program itself, containing compiled Berkeley Packet Filter (BPF) bytecode.
    - **Token Accounts**: Managed by the SPL Token program for token-related operations (if applicable).
 
 3. **Instructions**:
-   - Instructions are entry points to the program, similar to EVM contract functions:
+   - Instructions serve as entry points to the program, defining its functionality:
      - `initialize`: Creates PDAs and sets initial state (e.g., admin settings).
-     - `update_record`: Modifies data in a record account (requires authorization).
-     - `grant_access`: Updates user permissions (admin-only).
-     - `transfer_token`: Handles token transfers (if applicable).
-   - Each instruction declares accounts to read/write, enabling parallel execution via Solana’s Sealevel runtime.
+     - `update_record`: Modifies data in a record account, with authorization checks.
+     - `grant_access`: Updates user permissions, restricted to admins.
+     - `transfer_token`: Facilitates token transfers (if applicable).
+   - Each instruction specifies accounts to read or write, enabling parallel execution via Solana’s Sealevel runtime.
 
 4. **Client Interaction**:
    - Clients (e.g., web apps or scripts) interact with the program using Solana’s JSON RPC API or libraries like `@solana/web3.js`.
-   - Transactions include instruction data, account lists, and signatures from relevant keypairs (e.g., user or admin).
+   - Transactions include:
+     - Instruction data (e.g., function name and parameters).
+     - A list of accounts to access.
+     - Signatures from relevant keypairs (e.g., user or admin).
 
 5. **Parallel Execution**:
-   - Solana’s Sealevel runtime processes transactions in parallel when they access non-overlapping accounts. The program specifies account access (read/write) upfront, maximizing throughput.
-   - Example: Two `update_record` calls for different PDAs can execute concurrently.
+   - Solana’s Sealevel runtime processes transactions concurrently when they access non-overlapping accounts. The program declares account access (read/write) in each instruction, allowing the runtime to optimize transaction scheduling.
+   - Example: Two `update_record` instructions targeting different PDAs can execute simultaneously.
 
 ### Data Flow
 
-1. **Initialization**: A client calls `initialize` to create PDAs for configuration and data storage, setting initial state (e.g., admin key).
-2. **Data Operations**: Users call `update_record` to store or modify data in a PDA, with the program validating permissions.
-3. **Permission Management**: Admins call `grant_access` to update user permissions in a PDA.
-4. **Token Operations** (if applicable): Users call `transfer_token` to interact with SPL Token accounts.
+1. **Initialization**:
+   - A client calls `initialize` to create PDAs for configuration and data storage, setting initial state (e.g., admin public key).
+2. **Data Operations**:
+   - Users call `update_record` to store or update data in a PDA, with the program enforcing permission checks.
+3. **Permission Management**:
+   - Admins call `grant_access` to modify user permissions in a PDA.
+4. **Token Operations** (if applicable):
+   - Users call `transfer_token` to manage token transfers via SPL Token accounts.
 
 ### Security Considerations
 
-- **Account Ownership**: PDAs are owned by the program, ensuring only the program can modify them.
-- **Signature Verification**: Instructions validate signers (e.g., user or admin keypairs).
-- **Rent Exemption**: Accounts maintain a minimum balance (lamports) to persist.
-- **Anchor Constraints**: Use `@account` and `@constraint` macros to enforce validation (e.g., correct PDA derivation).
-
-### Differences from EVM
-
-- **State Management**:
-  - EVM: State is stored in the contract’s storage (e.g., mappings or arrays).
-  - Solana: State is stored in separate accounts (PDAs), and programs are stateless.
-- **Execution**:
-  - EVM: Sequential execution, gas-based cost.
-  - Solana: Parallel execution via Sealevel, cost measured in compute units.
-- **Programming**:
-  - EVM: Solidity/Vyper, compiled to EVM bytecode.
-  - Solana: Rust with Anchor, compiled to BPF bytecode.
-- **Account Model**:
-  - EVM: Externally Owned Accounts (EOAs) and Contract Accounts (CAs).
-  - Solana: All accounts can store data; executable (programs) vs. non-executable (data).
+- **Account Ownership**: PDAs are owned by the program, ensuring only the program can modify their data.
+- **Signature Verification**: Instructions validate signers (e.g., user or admin keypairs) to enforce access control.
+- **Rent Exemption**: Accounts maintain a minimum balance of lamports to remain active on the blockchain.
+- **Anchor Constraints**: Use `@account` and `@constraint` macros to enforce validation, such as correct PDA derivation.
 
 ### Example Program Structure
 
