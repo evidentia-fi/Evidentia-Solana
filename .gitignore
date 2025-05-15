@@ -1,0 +1,9 @@
+target/
+programs/**/target/
+**/*.rs.bk
+.DS_Store
+node_modules/
+.env
+*.log
+*.tsbuildinfo
+.vscode/
