@@ -82,6 +82,38 @@ Evidentia is a decentralized finance (DeFi) platform on Solana that enables user
   - `earned(staker: Pubkey)`: Calculates unclaimed rewards.
 - **Test Version (StableCoinsStakingV2)**: Includes `initialize_v2` and `new_feature` for upgrade testing.
 
+## 📐 Protocol Architecture
+
+User Wallet
+│
+▼
+[BOND NFT (ISIN)] ←──────────────┐
+│ │
+▼ │
+[Bond Tokenization Program] │
+│ │
+▼ │
+[Bond NFT Mint] ──────► [User NFT Account]
+│
+User stakes NFT(s) ▼
+[CDP Stablecoin Program]
+- Accepts Bond NFT
+- Mints Stablecoin with 5% safety margin
+- Tracks borrowed amount
+- Applies borrow rate over time
+- Sends interest to staking pool
+│
+┌────────────┴─────────────┐
+▼ ▼
+[User Stablecoin Account] [Staking Reward Vault]
+│
+Interest minting from loans
+▼
+[Stablecoin Staking Program]
+- Users stake SBC
+- Earn rewards (from loan interest)
+
+
 ### Data Structures
 ```rust
 #[account]
