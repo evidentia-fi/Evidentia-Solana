@@ -1,0 +1,13 @@
+[workspace]
+members = [
+  "programs/bond_tokenization",
+  "programs/cdp_stablecoin",
+  "programs/stablecoin_staking"
+]
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "anchor test"
